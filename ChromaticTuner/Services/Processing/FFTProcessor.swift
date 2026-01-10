@@ -5,13 +5,16 @@ import AVFoundation
 class FFTProcessor {
     private let fftSize: Int
     private let fftSetup: vDSP_DFT_Setup
+    
+    // Pre-allocated buffers to prevent heap allocation during callbacks
     private var window: [Float]
-
     private var realParts: [Float]
     private var imagParts: [Float]
     private var inputImagParts: [Float]
+    private var magnitudes: [Float]
+    private var windowedData: [Float]
 
-    init(fftSize: Int = AudioConstants.fftSize) {
+    init(fftSize: Int = 2048) {
         self.fftSize = fftSize
 
         guard let setup = vDSP_DFT_zop_CreateSetup(
@@ -21,15 +24,16 @@ class FFTProcessor {
         ) else {
             fatalError("Failed to create FFT setup")
         }
-
         self.fftSetup = setup
 
         self.window = [Float](repeating: 0, count: fftSize)
-        vDSP_hann_window(&self.window, vDSP_Length(fftSize), Int32(vDSP_HANN_NORM))
-
         self.realParts = [Float](repeating: 0, count: fftSize)
         self.imagParts = [Float](repeating: 0, count: fftSize)
         self.inputImagParts = [Float](repeating: 0, count: fftSize)
+        self.magnitudes = [Float](repeating: 0, count: fftSize / 2)
+        self.windowedData = [Float](repeating: 0, count: fftSize)
+
+        vDSP_hann_window(&self.window, vDSP_Length(fftSize), Int32(vDSP_HANN_NORM))
     }
 
     deinit {
@@ -37,86 +41,59 @@ class FFTProcessor {
     }
 
     func processBuffer(_ buffer: AVAudioPCMBuffer) -> [Float] {
-        guard let channelData = buffer.floatChannelData?[0] else {
-            print("❌ FFTProcessor: No channel data available")
-            return []
-        }
+        guard let channelData = buffer.floatChannelData?[0] else { return [] }
+        let dataSize = min(Int(buffer.frameLength), fftSize)
 
-        let frameCount = Int(buffer.frameLength)
-        let dataSize = min(frameCount, fftSize)
+        // 1. Vectorized Windowing
+        vDSP_vmul(channelData, 1, window, 1, &windowedData, 1, vDSP_Length(dataSize))
 
-        // Calculate RMS of input signal
-        var rms: Float = 0
-        vDSP_rmsqv(channelData, 1, &rms, vDSP_Length(dataSize))
-        print("📈 FFTProcessor: Input RMS: \(String(format: "%.6f", rms))")
-
-        var windowedData = [Float](repeating: 0, count: fftSize)
-
-        for i in 0..<dataSize {
-            windowedData[i] = channelData[i] * window[i]
-        }
-
+        // 2. Execute FFT
         vDSP_DFT_Execute(fftSetup, windowedData, inputImagParts, &realParts, &imagParts)
 
-        return computeMagnitudeSpectrum()
-    }
-
-    private func computeMagnitudeSpectrum() -> [Float] {
-        let halfSize = fftSize / 2
-        var magnitudes = [Float](repeating: 0, count: halfSize)
-
-        for i in 0..<halfSize {
-            let real = realParts[i]
-            let imag = imagParts[i]
-            magnitudes[i] = sqrt(real * real + imag * imag)
+        // 3. Vectorized Magnitude Calculation (Fixing the inout warning)
+        // We create the SplitComplex structure locally so the pointers are valid for the call
+        realParts.withUnsafeMutableBufferPointer { rPtr in
+            imagParts.withUnsafeMutableBufferPointer { iPtr in
+                var splitComplex = DSPSplitComplex(realp: rPtr.baseAddress!, imagp: iPtr.baseAddress!)
+                vDSP_zvabs(&splitComplex, 1, &magnitudes, 1, vDSP_Length(fftSize / 2))
+            }
         }
 
-        let scaleFactor = 2.0 / Float(fftSize)
-        vDSP_vsmul(magnitudes, 1, [scaleFactor], &magnitudes, 1, vDSP_Length(halfSize))
+        // 4. Vectorized Scaling
+        var scaleFactor = 2.0 / Float(fftSize)
+        vDSP_vsmul(magnitudes, 1, &scaleFactor, &magnitudes, 1, vDSP_Length(fftSize / 2))
 
         return magnitudes
     }
 
-    func detectPeaks(in spectrum: [Float], sampleRate: Float, minFreq: Float, maxFreq: Float) -> [(bin: Int, magnitude: Float)] {
+    func detectPeaks(in spectrum: [Float], sampleRate: Float, minFreq: Float, maxFreq: Float) -> [(bin: Int, magnitude: Float, interpolatedFreq: Float)] {
         let binWidth = sampleRate / Float(fftSize)
-        let minBin = Int(ceil(minFreq / binWidth))
-        let maxBin = Int(floor(maxFreq / binWidth))
+        let minBin = max(1, Int(ceil(minFreq / binWidth)))
+        let maxBin = min(spectrum.count - 2, Int(floor(maxFreq / binWidth)))
 
-        print("🔎 FFTProcessor: Searching for peaks between \(minFreq)-\(maxFreq) Hz (bins \(minBin)-\(maxBin))")
+        var detectedPeaks: [(bin: Int, magnitude: Float, interpolatedFreq: Float)] = []
 
-        guard maxBin > minBin, maxBin < spectrum.count else {
-            print("❌ FFTProcessor: Invalid bin range")
-            return []
-        }
-
-        let relevantSpectrum = Array(spectrum[minBin...maxBin])
-        guard let maxMagnitude = relevantSpectrum.max(), maxMagnitude > 0 else {
-            print("⚠️ FFTProcessor: No signal in spectrum (max magnitude = 0)")
-            return []
-        }
-
-        let thresholdLinear = maxMagnitude * pow(10, AudioConstants.peakThresholdDB / 20.0)
-        print("📊 FFTProcessor: Max magnitude: \(String(format: "%.6f", maxMagnitude)), Threshold: \(String(format: "%.6f", thresholdLinear)) (\(AudioConstants.peakThresholdDB) dB)")
-
-        var peaks: [(bin: Int, magnitude: Float)] = []
-
-        for i in 1..<relevantSpectrum.count - 1 {
-            let magnitude = relevantSpectrum[i]
-
-            if magnitude > thresholdLinear &&
-               magnitude > relevantSpectrum[i - 1] &&
-               magnitude > relevantSpectrum[i + 1] {
-                let freq = Float(minBin + i) * binWidth
-                peaks.append((bin: minBin + i, magnitude: magnitude))
-                print("   🎯 Peak at bin \(minBin + i): \(String(format: "%.1f", freq)) Hz, magnitude: \(String(format: "%.6f", magnitude))")
+        for i in minBin...maxBin {
+            let val = spectrum[i]
+            
+            // Local maxima check
+            if val > spectrum[i-1] && val > spectrum[i+1] {
+                // Quadratic Interpolation for sub-bin accuracy
+                let alpha = spectrum[i-1]
+                let beta = spectrum[i]
+                let gamma = spectrum[i+1]
+                
+                let denominator = (alpha - 2 * beta + gamma)
+                let p = denominator != 0 ? 0.5 * (alpha - gamma) / denominator : 0
+                
+                let interpolatedBin = Float(i) + p
+                let actualFreq = interpolatedBin * binWidth
+                
+                detectedPeaks.append((bin: i, magnitude: val, interpolatedFreq: actualFreq))
             }
         }
 
-        peaks.sort { $0.magnitude > $1.magnitude }
-
-        let finalPeaks = Array(peaks.prefix(AudioConstants.maxPitchesCount))
-        print("✅ FFTProcessor: Returning top \(finalPeaks.count) peaks")
-
-        return finalPeaks
+        detectedPeaks.sort { $0.magnitude > $1.magnitude }
+        return Array(detectedPeaks.prefix(10))
     }
 }

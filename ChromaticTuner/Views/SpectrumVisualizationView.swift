@@ -65,7 +65,7 @@ struct SpectrumVisualizationView: View {
         Color.black.ignoresSafeArea()
         SpectrumVisualizationView(
             audioData: AudioVisualizationData(
-                spectrum: Array(repeating: 0.1, count: 1024),
+                spectrum: Array(repeating: 0.1, count: 2048),
                 pitches: [],
                 sampleRate: 44100
             )

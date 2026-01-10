@@ -3,16 +3,28 @@ import AVFoundation
 
 class PitchDetector: PitchDetectorProtocol {
     private let fftProcessor: FFTProcessor
+    private let chromaProcessor: ChromaProcessor
 
-    init(fftProcessor: FFTProcessor = FFTProcessor()) {
+    init(
+        fftProcessor: FFTProcessor = FFTProcessor(fftSize: AudioConstants.fftSize),
+        chromaProcessor: ChromaProcessor = ChromaProcessor()
+    ) {
         self.fftProcessor = fftProcessor
+        self.chromaProcessor = chromaProcessor
     }
 
-    func detectPitches(from buffer: AVAudioPCMBuffer) -> ([DetectedPitch], [Float]) {
-        print("📊 PitchDetector: Processing buffer...")
-        let spectrum = fftProcessor.processBuffer(buffer)
+    /// Analyzes a buffer to return high-precision pitches and a 12-bin Chromagram.
+    /// - Returns: A tuple containing detected pitches, the raw spectrum, and the 12-bin chroma vector.
+    func detectPitches(from buffer: AVAudioPCMBuffer) -> (pitches: [DetectedPitch], spectrum: [Float], chroma: [Float]) {
         let sampleRate = Float(buffer.format.sampleRate)
+        
+        // 1. Generate Magnitude Spectrum
+        let spectrum = fftProcessor.processBuffer(buffer)
+        
+        // 2. Generate Chromagram (The 12-note energy profile)
+        let chroma = chromaProcessor.calculateChroma(from: spectrum, sampleRate: sampleRate)
 
+        // 3. Detect discrete peaks with sub-bin precision
         let peaks = fftProcessor.detectPeaks(
             in: spectrum,
             sampleRate: sampleRate,
@@ -20,17 +32,14 @@ class PitchDetector: PitchDetectorProtocol {
             maxFreq: AudioConstants.maxDetectionFrequency
         )
 
-        print("🔍 Found \(peaks.count) frequency peaks from FFT")
-
-        var filteredCount = 0
-        let pitches = peaks.compactMap { peak -> DetectedPitch? in
-            if peak.magnitude < AudioConstants.minimumMagnitudeThreshold {
-                filteredCount += 1
+        // 4. Map peaks to formal Pitch objects
+        let detectedPitches = peaks.compactMap { peak -> DetectedPitch? in
+            guard peak.magnitude >= AudioConstants.minimumMagnitudeThreshold else {
                 return nil
             }
 
-            let frequency = binToFrequency(bin: peak.bin, sampleRate: sampleRate)
-
+            // Use interpolated frequency for pinpoint note mapping
+            let frequency = peak.interpolatedFreq
             guard let note = Note.from(frequency: frequency) else {
                 return nil
             }
@@ -42,38 +51,25 @@ class PitchDetector: PitchDetectorProtocol {
             )
         }
 
-        if filteredCount > 0 {
-            print("🚫 Filtered out \(filteredCount) peaks below magnitude threshold (\(AudioConstants.minimumMagnitudeThreshold))")
-        }
+        // 5. Clean up Discrete Pitches (Sort by strength and remove octave duplicates)
+        let sortedPitches = detectedPitches.sorted { $0.magnitude > $1.magnitude }
+        let uniquePitches = removeOctaveDuplicates(sortedPitches)
 
-        print("✅ Created \(pitches.count) pitch candidates")
-
-        let filteredPitches = removeOctaveDuplicates(pitches)
-
-        if pitches.count != filteredPitches.count {
-            print("🔄 Removed \(pitches.count - filteredPitches.count) octave duplicates")
-        }
-
-        print("🎵 Final: \(filteredPitches.count) unique pitches")
-
-        return (filteredPitches, spectrum)
-    }
-
-    private func binToFrequency(bin: Int, sampleRate: Float) -> Float {
-        let binWidth = sampleRate / Float(AudioConstants.fftSize)
-        return Float(bin) * binWidth
+        return (uniquePitches, spectrum, chroma)
     }
 
     private func removeOctaveDuplicates(_ pitches: [DetectedPitch]) -> [DetectedPitch] {
         var uniquePitches: [DetectedPitch] = []
+        var seenNoteNames = Set<String>()
 
         for pitch in pitches {
-            let isDuplicate = uniquePitches.contains { existingPitch in
-                pitch.note == existingPitch.note
-            }
-
-            if !isDuplicate {
+            // Note: If your 'Note' enum/struct includes octaves (e.g., C3 vs C4),
+            // you may want to filter by the base name (e.g., "C") to find chord components.
+            let noteName = pitch.note.rawValue
+            
+            if !seenNoteNames.contains(noteName) {
                 uniquePitches.append(pitch)
+                seenNoteNames.insert(noteName)
             }
         }
 

@@ -13,7 +13,7 @@ class ChordDetectionService: ChordDetectionServiceProtocol {
 
     private(set) var isRunning: Bool = false
 
-    private let audioCapture: AudioCaptureServiceProtocol
+    private var audioCapture: AudioCaptureServiceProtocol
     private let pitchDetector: PitchDetectorProtocol
     private let chordRecognizer: ChordRecognizerProtocol
 
@@ -33,57 +33,47 @@ class ChordDetectionService: ChordDetectionServiceProtocol {
         self.audioCapture = audioCapture
         self.pitchDetector = pitchDetector
         self.chordRecognizer = chordRecognizer
-
-        var capture = audioCapture
-        capture.delegate = self
     }
 
     func start() throws {
-        print("🎵 ChordDetectionService: Starting audio capture...")
+        audioCapture.delegate = self
         try audioCapture.startCapture()
         isRunning = true
-        print("✅ ChordDetectionService: Audio capture started successfully")
     }
 
     func stop() {
-        print("⏹️ ChordDetectionService: Stopping audio capture...")
         audioCapture.stopCapture()
         isRunning = false
         chordSubject.send(nil)
         audioDataSubject.send(nil)
-        print("✅ ChordDetectionService: Audio capture stopped")
     }
 }
 
 extension ChordDetectionService: AudioCaptureDelegate {
     func didCaptureAudioBuffer(_ buffer: AVAudioPCMBuffer, time: AVAudioTime) {
-        print("🎤 Audio buffer received: \(buffer.frameLength) frames at \(buffer.format.sampleRate) Hz")
-
+        
         processingQueue.async { [weak self] in
             guard let self = self else { return }
 
-            let (pitches, spectrum) = self.pitchDetector.detectPitches(from: buffer)
+            // 1. Updated Call: Now captures (pitches, spectrum, chroma)
+            let result = self.pitchDetector.detectPitches(from: buffer)
+            
+            // 2. Pass both pitches and chroma to the updated recognizer
+            let chord = self.chordRecognizer.recognizeChord(
+                from: result.pitches,
+                chroma: result.chroma
+            )
 
-            print("🎼 Detected \(pitches.count) pitches:")
-            for pitch in pitches {
-                print("   - \(pitch.note.rawValue): \(String(format: "%.1f", pitch.frequency)) Hz, magnitude: \(String(format: "%.4f", pitch.magnitude))")
-            }
-
-            let chord = self.chordRecognizer.recognizeChord(from: pitches)
-
-            if let chord = chord {
-                print("🎸 Chord detected: \(chord.displayName) (confidence: \(String(format: "%.2f", chord.confidence)))")
-            } else {
-                print("❌ No chord detected")
-            }
-
+            // 3. Prepare visualization data
             let audioData = AudioVisualizationData(
-                spectrum: spectrum,
-                pitches: pitches,
+                spectrum: result.spectrum,
+                pitches: result.pitches,
                 sampleRate: Float(buffer.format.sampleRate)
             )
 
+            // 4. Update UI on main thread
             DispatchQueue.main.async {
+                // Only send if the value has actually changed or needs updating
                 self.chordSubject.send(chord)
                 self.audioDataSubject.send(audioData)
             }
