@@ -1,0 +1,21 @@
+name: ChromaticTuner
+options:
+  bundleIdPrefix: com.chromatictuner
+  deploymentTarget:
+    iOS: "17.0"
+
+targets:
+  ChromaticTuner:
+    type: application
+    platform: iOS
+    sources:
+      - ChromaticTuner
+    settings:
+      INFOPLIST_FILE: ChromaticTuner/App/Info.plist
+      PRODUCT_BUNDLE_IDENTIFIER: com.chromatictuner.ChromaticTuner
+      TARGETED_DEVICE_FAMILY: "1,2"
+      SWIFT_VERSION: "5.9"
+    dependencies:
+      - framework: AVFoundation.framework
+      - framework: Accelerate.framework
+      - framework: Combine.framework
