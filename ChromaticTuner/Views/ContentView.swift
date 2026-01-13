@@ -3,6 +3,10 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var viewModel = ChordDetectionViewModel()
 
+    private var dominantPitch: DetectedPitch? {
+        viewModel.audioData?.pitches.max(by: { $0.magnitude < $1.magnitude })
+    }
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -13,7 +17,7 @@ struct ContentView: View {
 
                 Spacer()
 
-                ChordDisplayView(chord: viewModel.currentChord)
+                ChordDisplayView(chord: viewModel.currentChord, dominantPitch: dominantPitch)
  
                 if let audioData = viewModel.audioData {
                     SpectrumVisualizationView(audioData: audioData)

@@ -47,6 +47,14 @@ enum Note: String, CaseIterable {
         let diff = other.semitoneOffset - self.semitoneOffset
         return diff >= 0 ? diff : diff + 12
     }
+
+    var nextSemitone: Note {
+        Note.allCases[(semitoneOffset + 1) % 12]
+    }
+
+    var previousSemitone: Note {
+        Note.allCases[(semitoneOffset + 11) % 12]
+    }
 }
 
 extension Note: Comparable {

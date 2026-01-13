@@ -13,4 +13,12 @@ struct DetectedChord {
     var shortName: String {
         root.rawValue + (quality == .minor ? "m" : "")
     }
+
+    var previousChord: DetectedChord {
+        DetectedChord(root: root.previousSemitone, quality: quality, confidence: 0, notes: [])
+    }
+
+    var nextChord: DetectedChord {
+        DetectedChord(root: root.nextSemitone, quality: quality, confidence: 0, notes: [])
+    }
 }
