@@ -51,26 +51,6 @@ struct SpectrumVisualizationView: View {
                 context.fill(Path(roundedRect: rect, cornerRadius: 2), with: .color(color))
             }
 
-            for pitch in audioData.pitches {
-                let frequency = pitch.frequency
-                if frequency >= minFreq && frequency <= maxFreq {
-                    let bin = Int(frequency / binWidth) - minBin
-                    if bin >= 0 && bin < relevantSpectrum.count {
-                        let x = CGFloat(bin) * barWidth + barWidth / 2
-                        let markerPath = Path { path in
-                            path.move(to: CGPoint(x: x, y: size.height))
-                            path.addLine(to: CGPoint(x: x, y: 0))
-                        }
-                        context.stroke(markerPath, with: .color(.green), lineWidth: 2)
-
-                        let noteText = Text(pitch.note.rawValue)
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(.green)
-
-                        context.draw(noteText, at: CGPoint(x: x, y: 10))
-                    }
-                }
-            }
         }
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }

@@ -217,11 +217,11 @@ class FFTProcessor {
         return Array(detectedPeaks.prefix(10))
     }
 
-    /// Corrects common octave errors in HPS detection.
-    /// If a peak at f/2 has sufficient energy relative to the detected peak at f,
-    /// the lower octave is likely the true fundamental.
+    /// Corrects common harmonic errors in HPS detection.
+    /// Checks if the detected frequency is actually a harmonic (2nd, 3rd, 4th, or 5th)
+    /// of a lower fundamental by looking for energy at sub-harmonic frequencies.
     ///
-    /// Rule: If magnitude at f/2 > threshold * magnitude at f, choose f/2
+    /// Rule: If magnitude at f/n > threshold * magnitude at f, choose f/n
     private func correctOctaveError(
         frequency: Float,
         hpsMagnitude: Float,
@@ -230,24 +230,37 @@ class FFTProcessor {
     ) -> Float {
         let binWidth = sampleRate / Float(fftSize)
         let currentBin = Int(frequency / binWidth)
-        let halfFreqBin = currentBin / 2
-
-        // Check if half-frequency bin is valid and above noise floor (~50 Hz)
-        guard halfFreqBin > 0,
-              halfFreqBin < originalSpectrum.count,
-              frequency / 2 >= 50.0 else {
-            return frequency
-        }
-
         let currentMagnitude = currentBin < originalSpectrum.count ? originalSpectrum[currentBin] : 0
-        let halfFreqMagnitude = originalSpectrum[halfFreqBin]
 
-        // Octave correction threshold: if the lower octave has at least 20% of the energy,
+        // Harmonic correction threshold: if the sub-harmonic has at least 20% of the energy,
         // it's likely the true fundamental (harmonics often exceed fundamental in amplitude)
-        let octaveCorrectionThreshold: Float = 0.2
+        let harmonicCorrectionThreshold: Float = 0.2
+        let minFrequency: Float = 50.0  // Noise floor
 
-        if halfFreqMagnitude > octaveCorrectionThreshold * currentMagnitude {
-            return frequency / 2
+        // Check sub-harmonics in order of likelihood (2nd, 3rd, 4th, 5th)
+        // Lower divisors are more common harmonic errors
+        for divisor in 2...5 {
+            let subHarmonicFreq = frequency / Float(divisor)
+            let subHarmonicBin = currentBin / divisor
+
+            // Check if sub-harmonic bin is valid and above noise floor
+            guard subHarmonicBin > 0,
+                  subHarmonicBin < originalSpectrum.count,
+                  subHarmonicFreq >= minFrequency else {
+                continue
+            }
+
+            let subHarmonicMagnitude = originalSpectrum[subHarmonicBin]
+
+            if subHarmonicMagnitude > harmonicCorrectionThreshold * currentMagnitude {
+                // Found a likely fundamental - recursively check if this is also a harmonic
+                return correctOctaveError(
+                    frequency: subHarmonicFreq,
+                    hpsMagnitude: hpsMagnitude,
+                    originalSpectrum: originalSpectrum,
+                    sampleRate: sampleRate
+                )
+            }
         }
 
         return frequency

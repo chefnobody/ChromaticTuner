@@ -16,7 +16,7 @@ enum AudioConstants {
 
     static let minimumMagnitudeThreshold: Float = 0.01
 
-    static let chordStabilityDuration: TimeInterval = 1.5
-    static let chordClearDelay: TimeInterval = 2.0
-    static let chordConfirmationCount: Int = 3
+    static let chordStabilityDuration: TimeInterval = 2.0
+    static let chordClearDelay: TimeInterval = 2.5
+    static let chordConfirmationCount: Int = 5
 }

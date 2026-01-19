@@ -1,8 +1,10 @@
 import Foundation
 import Combine
 import AVFoundation
+import os
 
 class ChordDetectionService: ChordDetectionServiceProtocol {
+    private let logger = Logger(subsystem: "com.chromatictuner", category: "ChordDetection")
     var chordPublisher: AnyPublisher<DetectedChord?, Never> {
         chordSubject.eraseToAnyPublisher()
     }
@@ -81,7 +83,7 @@ extension ChordDetectionService: AudioCaptureDelegate {
     }
 
     func didEncounterError(_ error: Error) {
-        print("❌ Audio capture error: \(error)")
+        logger.error("Audio capture error: \(error)")
         stop()
     }
 }

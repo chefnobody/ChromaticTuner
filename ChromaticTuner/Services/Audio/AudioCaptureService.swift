@@ -1,7 +1,9 @@
 import Foundation
 import AVFoundation
+import os
 
 class AudioCaptureService: AudioCaptureServiceProtocol {
+    private let logger = Logger(subsystem: "com.chromatictuner", category: "AudioCapture")
     weak var delegate: AudioCaptureDelegate?
     private(set) var isRunning: Bool = false
 
@@ -9,31 +11,31 @@ class AudioCaptureService: AudioCaptureServiceProtocol {
     private let audioSession = AVAudioSession.sharedInstance()
 
     func startCapture() throws {
-        print("🔧 AudioCaptureService: Requesting microphone permission...")
+        logger.debug("Requesting microphone permission...")
         try requestMicrophonePermission()
-        print("✅ Microphone permission granted")
+        logger.info("Microphone permission granted")
 
-        print("🔧 AudioCaptureService: Configuring audio session...")
+        logger.debug("Configuring audio session...")
         try configureAudioSession()
-        print("✅ Audio session configured")
+        logger.info("Audio session configured")
 
-        print("🔧 AudioCaptureService: Setting up audio engine...")
+        logger.debug("Setting up audio engine...")
         try setupAudioEngine()
-        print("✅ Audio engine setup complete")
+        logger.info("Audio engine setup complete")
 
-        print("🔧 AudioCaptureService: Starting audio engine...")
+        logger.debug("Starting audio engine...")
         try startAudioEngine()
-        print("✅ Audio engine started")
+        logger.info("Audio engine started")
 
         isRunning = true
     }
 
     func stopCapture() {
-        print("🛑 AudioCaptureService: Stopping audio engine...")
+        logger.info("Stopping audio engine...")
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         isRunning = false
-        print("✅ Audio engine stopped")
+        logger.info("Audio engine stopped")
     }
 
     private func requestMicrophonePermission() throws {
@@ -77,10 +79,10 @@ class AudioCaptureService: AudioCaptureServiceProtocol {
         let inputNode = audioEngine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
 
-        print("📊 Input format: \(inputFormat.sampleRate) Hz, \(inputFormat.channelCount) channel(s)")
+        logger.debug("Input format: \(inputFormat.sampleRate) Hz, \(inputFormat.channelCount) channel(s)")
 
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
-            print("❌ Invalid format!")
+            logger.error("Invalid audio format")
             throw AudioCaptureError.invalidFormat
         }
 
@@ -91,7 +93,7 @@ class AudioCaptureService: AudioCaptureServiceProtocol {
         ) { [weak self] buffer, time in
             self?.delegate?.didCaptureAudioBuffer(buffer, time: time)
         }
-        print("🎙️ Audio tap installed with buffer size: \(AudioConstants.bufferSize)")
+        logger.info("Audio tap installed with buffer size: \(AudioConstants.bufferSize)")
     }
 
     private func startAudioEngine() throws {

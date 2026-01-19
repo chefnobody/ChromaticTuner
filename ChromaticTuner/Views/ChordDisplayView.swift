@@ -4,16 +4,40 @@ struct ChordDisplayView: View {
     let chord: DetectedChord?
     let dominantPitch: DetectedPitch?
 
-    private var isFlat: Bool {
-        dominantPitch?.isFlat ?? false
+    // Tuning state persistence - holds states to reduce flicker
+    @State private var displayedTuningState: TuningState = .neutral
+    @State private var lastInTuneTime: Date?
+
+    private enum TuningState: Equatable {
+        case flat, inTune, sharp, neutral
     }
 
-    private var isSharp: Bool {
-        dominantPitch?.isSharp ?? false
+    // How long to hold the "in tune" green state after detected
+    private let inTuneHoldDuration: TimeInterval = 1.0
+
+    private var currentTuningState: TuningState {
+        guard dominantPitch != nil else { return .neutral }
+        if dominantPitch?.isInTune == true { return .inTune }
+        if dominantPitch?.isFlat == true { return .flat }
+        if dominantPitch?.isSharp == true { return .sharp }
+        return .neutral
     }
 
-    private var isInTune: Bool {
-        dominantPitch?.isInTune ?? false
+    private var effectiveTuningState: TuningState {
+        let current = currentTuningState
+
+        // If currently in tune, always show in tune
+        if current == .inTune {
+            return .inTune
+        }
+
+        // If we were recently in tune, hold the green state
+        if let lastInTune = lastInTuneTime,
+           Date().timeIntervalSince(lastInTune) < inTuneHoldDuration {
+            return .inTune
+        }
+
+        return current
     }
 
     var body: some View {
@@ -21,31 +45,23 @@ struct ChordDisplayView: View {
             if let chord = chord {
                 // Chord root with flat/sharp indicators
                 HStack(spacing: 20) {
-                    // Flat indicator (left)
+                    // Flat indicator (left) - only show when not in tune
                     Text("♭")
                         .font(.system(size: 48, weight: .bold, design: .rounded))
-                        .foregroundColor(isFlat ? .red : .gray.opacity(0.2))
+                        .foregroundColor(effectiveTuningState == .flat ? .red : .gray.opacity(0.2))
                         .frame(width: 50)
 
                     // Chord root
                     Text(chord.root.rawValue)
                         .font(.system(size: 80, weight: .bold, design: .rounded))
-                        .foregroundColor(isInTune ? .green : .white)
+                        .foregroundColor(effectiveTuningState == .inTune ? .green : .white)
 
-                    // Sharp indicator (right)
+                    // Sharp indicator (right) - only show when not in tune
                     Text("♯")
                         .font(.system(size: 48, weight: .bold, design: .rounded))
-                        .foregroundColor(isSharp ? .orange : .gray.opacity(0.2))
+                        .foregroundColor(effectiveTuningState == .sharp ? .orange : .gray.opacity(0.2))
                         .frame(width: 50)
                 }
-
-                Text(chord.quality.displayName)
-                    .font(.system(size: 32, weight: .medium, design: .rounded))
-                    .foregroundColor(.gray)
-
-                Text(String(format: "%.0f%%", chord.confidence * 100))
-                    .font(.system(size: 16, weight: .regular, design: .monospaced))
-                    .foregroundColor(.gray.opacity(0.6))
             } else {
                 HStack(spacing: 20) {
                     Text("♭")
@@ -62,16 +78,16 @@ struct ChordDisplayView: View {
                         .foregroundColor(.gray.opacity(0.2))
                         .frame(width: 50)
                 }
-
-                Text("No chord detected")
-                    .font(.system(size: 18, weight: .regular))
-                    .foregroundColor(.gray.opacity(0.5))
             }
         }
         .frame(height: 180)
         .animation(.easeInOut(duration: 0.2), value: chord?.displayName)
-        .animation(.easeInOut(duration: 0.15), value: isFlat)
-        .animation(.easeInOut(duration: 0.15), value: isSharp)
+        .animation(.easeInOut(duration: 0.2), value: effectiveTuningState)
+        .onChange(of: currentTuningState) { _, newState in
+            if newState == .inTune {
+                lastInTuneTime = Date()
+            }
+        }
     }
 }
 

@@ -12,7 +12,7 @@ class PitchDetector: PitchDetectorProtocol {
 
     // Frequency smoothing buffer
     private var frequencyHistory: [Float] = []
-    private let smoothingWindowSize = 5
+    private let smoothingWindowSize = 7
 
     // Hysteresis threshold in cents - only switch notes when this far into the new note
     // A semitone is 100 cents, so 35 cents means we need to be 35% into the next note
