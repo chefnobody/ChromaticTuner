@@ -6,7 +6,7 @@ struct SpectrumVisualizationView: View {
     private let minFreq: Float = 60
     private let maxFreq: Float = 1000
 
-    private let targetBarCount = 64
+    private let targetBarCount = 32
 
     var body: some View {
         Canvas { context, size in
@@ -24,6 +24,7 @@ struct SpectrumVisualizationView: View {
             // Group bins together to create fewer, wider bars
             let binsPerBar = max(1, relevantSpectrum.count / targetBarCount)
             var groupedSpectrum: [Float] = []
+            
             for i in stride(from: 0, to: relevantSpectrum.count, by: binsPerBar) {
                 let end = min(i + binsPerBar, relevantSpectrum.count)
                 let group = relevantSpectrum[i..<end]
@@ -71,6 +72,7 @@ struct SpectrumVisualizationView: View {
                 }
             }
         }
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 

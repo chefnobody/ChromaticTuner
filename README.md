@@ -106,3 +106,19 @@ ChordDetectionService (Coordinator)
 - Chord progression recording
 - Alternative tunings support
 - Settings for sensitivity adjustment
+
+## Fundamental Concepts and Tools
+
+1. `AVFoundation` receives monophonic (single instrument) audio from on-device mic.
+2. Fast Fourier Transforms convert audio data in Time series to frequencies.
+   * Lots of math.
+   * Espeically, [windowing functions](https://en.wikipedia.org/wiki/Window_function). These are mathmetical means of detecting information from data within a "window" of some other series of data.
+   * Output is called a spectrogram which is a visual "comb" in which each "harmonic" can be seen.
+     * **Question:** What is a harmonic? (see below)
+3. [Harmonic Product Spectrum (HPS)](http://musicweb.ucsd.edu/~trsmyth/analysis/Harmonic_Product_Spectrum.html)
+   * The process of detecting harmonics from the spectrum produced by the FFT.
+   * Harmonics are composites (or groups) of sound vibrations ocurring at differing frequencies. Sometimes called "partials".
+     * _"When a single key is pressed upon a piano, what we hear is not just one frequency of sound vibration, but a composite of multiple sound vibrations occurring at different mathematically related frequencies."_
+     * _"The elements of this composite of vibrations at differing frequencies are referred to as harmonics or partials."_
+4. [Pitch Detection](https://en.wikipedia.org/wiki/Transcription_(music)#Pitch_detection)
+   * _"A 'pitch' is not a single vibration, such as a sine wave, but is a composite of multiple sound vibrations occurring at different mathematically related frequencies."_ ([Source](https://dsp.stackexchange.com/questions/25350/pitch-detection-harmonic-product-spectrum-whats-wrong))

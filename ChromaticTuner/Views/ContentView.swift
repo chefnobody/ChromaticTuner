@@ -9,8 +9,6 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
-
             VStack(spacing: 40) {
                 StatusIndicatorView(isRecording: viewModel.isRecording)
                     .padding(.top, 40)
@@ -20,9 +18,18 @@ struct ContentView: View {
                 ChordDisplayView(chord: viewModel.currentChord, dominantPitch: dominantPitch)
  
                 if let audioData = viewModel.audioData {
-                    SpectrumVisualizationView(audioData: audioData)
+                    SpectrumVisualizationView(
+                        audioData: audioData
+                    )
+                    .frame(height: 200)
+                    .padding(.horizontal, 40)
+                } else {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 48))
+                        .foregroundColor(.gray.opacity(0.3))
                         .frame(height: 200)
-                        .padding(.horizontal)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 40)
                 }
 
                 Spacer()
@@ -31,9 +38,10 @@ struct ContentView: View {
                     isRecording: viewModel.isRecording,
                     onToggle: viewModel.toggleRecording
                 )
-                .padding(.bottom, 40)
+                .padding(40)
             }
         }
+        .background(Color.black.ignoresSafeArea())
         .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
             Button("OK") {
                 viewModel.errorMessage = nil
