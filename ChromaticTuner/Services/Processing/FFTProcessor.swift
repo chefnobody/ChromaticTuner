@@ -232,9 +232,10 @@ class FFTProcessor {
         let currentBin = Int(frequency / binWidth)
         let currentMagnitude = currentBin < originalSpectrum.count ? originalSpectrum[currentBin] : 0
 
-        // Harmonic correction threshold: if the sub-harmonic has at least 20% of the energy,
-        // it's likely the true fundamental (harmonics often exceed fundamental in amplitude)
-        let harmonicCorrectionThreshold: Float = 0.2
+        // Harmonic correction threshold: if the sub-harmonic has at least 45% of the energy,
+        // it's likely the true fundamental. Guitar harmonics often exceed the fundamental,
+        // so we use a higher threshold to avoid false corrections.
+        let harmonicCorrectionThreshold: Float = 0.45
         let minFrequency: Float = 50.0  // Noise floor
 
         // Check sub-harmonics in order of likelihood (2nd, 3rd, 4th, 5th)

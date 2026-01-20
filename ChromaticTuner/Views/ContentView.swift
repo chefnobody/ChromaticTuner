@@ -15,14 +15,15 @@ struct ContentView: View {
 
                 Spacer()
 
-                ChordDisplayView(chord: viewModel.currentChord, dominantPitch: dominantPitch)
- 
+                ChordDisplayView(
+                    chord: viewModel.currentChord,
+                    dominantPitch: dominantPitch
+                )
+
                 if let audioData = viewModel.audioData {
-                    SpectrumVisualizationView(
-                        audioData: audioData
-                    )
-                    .frame(height: 200)
-                    .padding(.horizontal, 40)
+                    SpectrumVisualizationView(audioData: audioData)
+                        .frame(height: 200)
+                        .padding(.horizontal, 40)
                 } else {
                     Image(systemName: "waveform")
                         .font(.system(size: 48))

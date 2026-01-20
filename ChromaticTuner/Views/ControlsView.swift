@@ -20,7 +20,7 @@ struct ControlsView: View {
     var body: some View {
         Button(action: onToggle) {
             HStack(spacing: 12) {
-                Image(systemName: isRecording ? "microphone.fill" : "microphone.slash.fill")
+                Image(systemName: isRecording ? "microphone.slash.fill" : "microphone.fill")
                     .font(.system(size: 20))
                 Text(isRecording ? "Stop" : "Start")
                     .font(.system(size: 18, weight: .semibold))

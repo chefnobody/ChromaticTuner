@@ -15,8 +15,15 @@ class PitchDetector: PitchDetectorProtocol {
     private let smoothingWindowSize = 7
 
     // Hysteresis threshold in cents - only switch notes when this far into the new note
-    // A semitone is 100 cents, so 35 cents means we need to be 35% into the next note
-    private let hysteresisCents: Float = 35
+    // A semitone is 100 cents, so 18 cents means we need to be 18% into the next note
+    // Lower value = more responsive but potentially more jittery
+    private let hysteresisCents: Float = 18
+
+    // Onset detection state - skip pitch detection during attack transients
+    private var previousRMS: Float = 0
+    private var onsetFrameCount: Int = 0
+    private let onsetThresholdRatio: Float = 3.0  // RMS must increase by 3x to trigger onset
+    private let onsetSkipFrames: Int = 3  // Skip this many frames after onset detected
 
     init(
         fftProcessor: FFTProcessor = FFTProcessor(fftSize: AudioConstants.fftSize),
@@ -35,6 +42,21 @@ class PitchDetector: PitchDetectorProtocol {
         chroma: [Float]
     ) {
         let sampleRate = Float(buffer.format.sampleRate)
+
+        // 0. Onset detection - skip during attack transients
+        let currentRMS = calculateRMS(buffer)
+        let isOnset = previousRMS > 0 && currentRMS > previousRMS * onsetThresholdRatio
+        previousRMS = currentRMS
+
+        if isOnset {
+            onsetFrameCount = onsetSkipFrames
+        }
+
+        if onsetFrameCount > 0 {
+            onsetFrameCount -= 1
+            // Return empty results during attack transient
+            return ([], [], [])
+        }
 
         // 1. Generate Magnitude Spectrum
         let spectrum = fftProcessor.processBuffer(buffer)
@@ -173,6 +195,21 @@ class PitchDetector: PitchDetectorProtocol {
         }
 
         return bestFreq
+    }
+
+    /// Calculates the RMS (root mean square) energy of the audio buffer
+    private func calculateRMS(_ buffer: AVAudioPCMBuffer) -> Float {
+        guard let channelData = buffer.floatChannelData?[0] else { return 0 }
+        let frameLength = Int(buffer.frameLength)
+        guard frameLength > 0 else { return 0 }
+
+        var sumSquares: Float = 0
+        for i in 0..<frameLength {
+            let sample = channelData[i]
+            sumSquares += sample * sample
+        }
+
+        return sqrt(sumSquares / Float(frameLength))
     }
 
     private func removeOctaveDuplicates(_ pitches: [DetectedPitch]) -> [DetectedPitch] {
