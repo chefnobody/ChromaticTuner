@@ -110,7 +110,7 @@ ChordDetectionService (Coordinator)
 ## Fundamental Concepts and Tools
 
 1. `AVFoundation` receives monophonic (single instrument) audio from on-device mic.
-2. Fast Fourier Transforms convert audio data in Time series to frequencies.
+2. Fast Fourier Transform  converts audio data in Time series to frequencies.
    * Lots of math.
    * Espeically, [windowing functions](https://en.wikipedia.org/wiki/Window_function). These are mathmetical means of detecting information from data within a "window" of some other series of data.
    * Output is called a spectrogram which is a visual "comb" in which each "harmonic" can be seen.

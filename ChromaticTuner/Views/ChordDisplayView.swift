@@ -55,6 +55,7 @@ struct ChordDisplayView: View {
                     Text(chord.root.rawValue)
                         .font(.system(size: 80, weight: .bold, design: .rounded))
                         .foregroundColor(effectiveTuningState == .inTune ? .green : .white)
+                        .animation(.interactiveSpring, value: effectiveTuningState)
 
                     // Sharp indicator (right) - only show when not in tune
                     Text("♯")

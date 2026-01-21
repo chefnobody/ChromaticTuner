@@ -4,8 +4,8 @@
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>ChromaticTuner needs access to your microphone to detect and analyze musical chords from your instrument.</string>
-	<key>UILaunchScreen</key>
-	<dict/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
 	<key>UIDesignRequiresCompatibility</key>
 	<string>YES</string>
 </dict>
