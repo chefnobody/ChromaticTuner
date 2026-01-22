@@ -56,6 +56,11 @@ struct ChordDisplayView: View {
                         .font(.system(size: 80, weight: .bold, design: .rounded))
                         .foregroundColor(effectiveTuningState == .inTune ? .green : .white)
                         .animation(.interactiveSpring, value: effectiveTuningState)
+                        .overlay {
+                            if effectiveTuningState == .inTune {
+                                ParticleBurstView()
+                            }
+                        }
 
                     // Sharp indicator (right) - only show when not in tune
                     Text("♯")
@@ -92,6 +97,167 @@ struct ChordDisplayView: View {
     }
 }
 
+// MARK: - Sparkler Particle Effect
+
+private struct ParticleBurstView: View {
+    @State private var particles: [SparkleParticle] = []
+    @State private var emissionPoints: [CGPoint] = []
+    @State private var timer: Timer?
+
+    private let emissionRate: TimeInterval = 0.025  // New particle every 25ms
+    private let maxParticles = 60
+    private let numberOfEmissionPoints = 4
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            Canvas { context, size in
+                let now = timeline.date.timeIntervalSinceReferenceDate
+
+                for particle in particles {
+                    let age = now - particle.birthTime
+                    guard age < particle.lifetime else { continue }
+
+                    let progress = age / particle.lifetime
+                    let distance = particle.speed * age
+
+                    // Calculate position traveling outward from emission point
+                    let x = particle.origin.x + cos(particle.angle) * distance
+                    let y = particle.origin.y + sin(particle.angle) * distance
+
+                    // Fade out and shrink as particle ages
+                    let opacity = 1.0 - progress
+                    let scale = max(0.2, 1.0 - progress * 0.8)
+
+                    let particleSize = particle.size * scale
+                    let rect = CGRect(
+                        x: x - particleSize / 2,
+                        y: y - particleSize / 2,
+                        width: particleSize,
+                        height: particleSize
+                    )
+
+                    // Draw glowing sparkle
+                    context.opacity = opacity
+                    context.fill(
+                        Circle().path(in: rect.insetBy(dx: -2, dy: -2)),
+                        with: .color(particle.color.opacity(0.3))
+                    )
+                    context.fill(
+                        Circle().path(in: rect),
+                        with: .color(particle.color)
+                    )
+                }
+            }
+        }
+        .onAppear {
+            startEmitting()
+        }
+        .onDisappear {
+            timer?.invalidate()
+            timer = nil
+        }
+    }
+
+    private func generateEmissionPoints(in size: CGSize) -> [CGPoint] {
+        // Generate random points along the approximate edge of a letter
+        // The letter is roughly centered and takes up most of the overlay area
+        let centerX = size.width / 2
+        let centerY = size.height / 2
+        let letterWidth: CGFloat = 50   // Approximate letter width
+        let letterHeight: CGFloat = 70  // Approximate letter height
+
+        var points: [CGPoint] = []
+        for _ in 0..<numberOfEmissionPoints {
+            // Pick a random edge (top, bottom, left, right) and position along it
+            let edge = Int.random(in: 0..<4)
+            let point: CGPoint
+            switch edge {
+            case 0: // Top edge
+                point = CGPoint(
+                    x: centerX + CGFloat.random(in: -letterWidth/2...letterWidth/2),
+                    y: centerY - letterHeight/2 + CGFloat.random(in: -5...5)
+                )
+            case 1: // Bottom edge
+                point = CGPoint(
+                    x: centerX + CGFloat.random(in: -letterWidth/2...letterWidth/2),
+                    y: centerY + letterHeight/2 + CGFloat.random(in: -5...5)
+                )
+            case 2: // Left edge
+                point = CGPoint(
+                    x: centerX - letterWidth/2 + CGFloat.random(in: -5...5),
+                    y: centerY + CGFloat.random(in: -letterHeight/2...letterHeight/2)
+                )
+            default: // Right edge
+                point = CGPoint(
+                    x: centerX + letterWidth/2 + CGFloat.random(in: -5...5),
+                    y: centerY + CGFloat.random(in: -letterHeight/2...letterHeight/2)
+                )
+            }
+            points.append(point)
+        }
+        return points
+    }
+
+    private func startEmitting() {
+        // Initialize emission points (approximate letter bounds)
+        emissionPoints = generateEmissionPoints(in: CGSize(width: 100, height: 100))
+
+        // Emit initial burst from each point
+        for point in emissionPoints {
+            for _ in 0..<4 {
+                particles.append(SparkleParticle(origin: point))
+            }
+        }
+
+        // Continuous emission
+        timer = Timer.scheduledTimer(withTimeInterval: emissionRate, repeats: true) { _ in
+            // Remove dead particles
+            let now = Date().timeIntervalSinceReferenceDate
+            particles.removeAll { now - $0.birthTime > $0.lifetime }
+
+            // Occasionally shuffle emission points for variety
+            if Int.random(in: 0..<30) == 0 {
+                emissionPoints = generateEmissionPoints(in: CGSize(width: 100, height: 100))
+            }
+
+            // Add new particle from a random emission point
+            if particles.count < maxParticles, let point = emissionPoints.randomElement() {
+                particles.append(SparkleParticle(origin: point))
+            }
+        }
+    }
+}
+
+private struct SparkleParticle: Identifiable {
+    let id = UUID()
+    let birthTime: TimeInterval
+    let origin: CGPoint
+    let angle: Double
+    let speed: Double
+    let size: Double
+    let lifetime: Double
+    let color: Color
+
+    init(origin: CGPoint) {
+        self.birthTime = Date().timeIntervalSinceReferenceDate
+        self.origin = origin
+        self.angle = Double.random(in: 0...(2 * .pi))
+        self.speed = Double.random(in: 40...100)  // pixels per second
+        self.size = Double.random(in: 2...5)  // tiny sparkles
+        self.lifetime = Double.random(in: 0.4...0.8)  // short-lived
+
+        // Random green or yellow color
+        let colors: [Color] = [
+            .green,
+            .green.opacity(0.9),
+            .yellow,
+            Color(red: 0.7, green: 1.0, blue: 0.3),  // lime
+            Color(red: 1.0, green: 0.9, blue: 0.2),  // gold
+        ]
+        self.color = colors.randomElement()!
+    }
+}
+
 #Preview {
     ZStack {
         Color.black.ignoresSafeArea()
@@ -111,6 +277,22 @@ struct ChordDisplayView: View {
                 chord: DetectedChord(root: .G, quality: .major, confidence: 0.75, notes: [.G, .B, .D]),
                 dominantPitch: DetectedPitch(frequency: 400, magnitude: 0.8, note: .G)  // Sharp
             )
+        }
+    }
+}
+
+#Preview("Particle Burst") {
+    ZStack {
+        Color.black.ignoresSafeArea()
+        HStack(spacing: 30) {
+            ForEach(["A", "G", "C", "E"], id: \.self) { letter in
+                Text(letter)
+                    .font(.system(size: 80, weight: .bold, design: .rounded))
+                    .foregroundColor(.green)
+                    .overlay {
+                        ParticleBurstView()
+                    }
+            }
         }
     }
 }
