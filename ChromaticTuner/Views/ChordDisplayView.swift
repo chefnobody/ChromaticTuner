@@ -47,46 +47,49 @@ struct ChordDisplayView: View {
                 HStack(spacing: 20) {
                     // Flat indicator (left) - only show when not in tune
                     Text("♭")
-                        .font(.system(size: 48, weight: .bold, design: .rounded))
+                        .font(.system(size: 72, weight: .bold, design: .rounded))
                         .foregroundColor(effectiveTuningState == .flat ? .red : .gray.opacity(0.2))
-                        .frame(width: 50)
+                        .frame(width: 70)
 
                     // Chord root
                     Text(chord.root.rawValue)
-                        .font(.system(size: 80, weight: .bold, design: .rounded))
+                        .font(.system(size: 120, weight: .bold, design: .rounded))
                         .foregroundColor(effectiveTuningState == .inTune ? .green : .white)
                         .animation(.interactiveSpring, value: effectiveTuningState)
-                        .overlay {
-                            if effectiveTuningState == .inTune {
-                                ParticleBurstView()
-                            }
-                        }
 
                     // Sharp indicator (right) - only show when not in tune
                     Text("♯")
-                        .font(.system(size: 48, weight: .bold, design: .rounded))
+                        .font(.system(size: 72, weight: .bold, design: .rounded))
                         .foregroundColor(effectiveTuningState == .sharp ? .orange : .gray.opacity(0.2))
-                        .frame(width: 50)
+                        .frame(width: 70)
                 }
             } else {
                 HStack(spacing: 20) {
                     Text("♭")
-                        .font(.system(size: 48, weight: .bold, design: .rounded))
+                        .font(.system(size: 72, weight: .bold, design: .rounded))
                         .foregroundColor(.gray.opacity(0.2))
-                        .frame(width: 50)
+                        .frame(width: 70)
 
                     Text("—")
-                        .font(.system(size: 80, weight: .bold, design: .rounded))
+                        .font(.system(size: 120, weight: .bold, design: .rounded))
                         .foregroundColor(.gray.opacity(0.3))
 
                     Text("♯")
-                        .font(.system(size: 48, weight: .bold, design: .rounded))
+                        .font(.system(size: 72, weight: .bold, design: .rounded))
                         .foregroundColor(.gray.opacity(0.2))
-                        .frame(width: 50)
+                        .frame(width: 70)
                 }
             }
         }
-        .frame(height: 180)
+        .frame(height: 260)
+        .overlay {
+            // Particle effect layer - larger frame allows particles to spread beyond chord view
+            if effectiveTuningState == .inTune && chord != nil {
+                ParticleBurstView()
+                    .frame(width: 600, height: 600)
+                    .allowsHitTesting(false)
+            }
+        }
         .animation(.easeInOut(duration: 0.2), value: chord?.displayName)
         .animation(.easeInOut(duration: 0.2), value: effectiveTuningState)
         .onChange(of: currentTuningState) { _, newState in
@@ -103,14 +106,23 @@ private struct ParticleBurstView: View {
     @State private var particles: [SparkleParticle] = []
     @State private var emissionPoints: [CGPoint] = []
     @State private var timer: Timer?
+    @State private var canvasSize: CGSize = .zero
 
-    private let emissionRate: TimeInterval = 0.025  // New particle every 25ms
-    private let maxParticles = 60
-    private let numberOfEmissionPoints = 4
+    private let emissionRate: TimeInterval = 0.012  // New particle every 12ms
+    private let maxParticles = 250
+    private let numberOfEmissionPoints = 16
 
     var body: some View {
         TimelineView(.animation) { timeline in
             Canvas { context, size in
+                // Store canvas size for emission point generation
+                if canvasSize != size {
+                    DispatchQueue.main.async {
+                        canvasSize = size
+                        emissionPoints = generateEmissionPoints(in: size)
+                    }
+                }
+
                 let now = timeline.date.timeIntervalSinceReferenceDate
 
                 for particle in particles {
@@ -120,13 +132,20 @@ private struct ParticleBurstView: View {
                     let progress = age / particle.lifetime
                     let distance = particle.speed * age
 
-                    // Calculate position traveling outward from emission point
-                    let x = particle.origin.x + cos(particle.angle) * distance
-                    let y = particle.origin.y + sin(particle.angle) * distance
+                    // Calculate position traveling outward from emission point (centered in canvas)
+                    let centerX = size.width / 2
+                    let centerY = size.height / 2
+                    let offsetX = particle.origin.x - 300  // Adjust from 600x600 reference to center
+                    let offsetY = particle.origin.y - 300
+                    let x = centerX + offsetX + cos(particle.angle) * distance
+                    let y = centerY + offsetY + sin(particle.angle) * distance
 
-                    // Fade out and shrink as particle ages
-                    let opacity = 1.0 - progress
-                    let scale = max(0.2, 1.0 - progress * 0.8)
+                    // Smooth ease-out fade: starts slow, accelerates toward end
+                    let easedProgress = progress * progress
+                    let opacity = 1.0 - easedProgress
+
+                    // Shrink smoothly
+                    let scale = max(0.1, 1.0 - easedProgress * 0.9)
 
                     let particleSize = particle.size * scale
                     let rect = CGRect(
@@ -136,11 +155,15 @@ private struct ParticleBurstView: View {
                         height: particleSize
                     )
 
-                    // Draw glowing sparkle
+                    // Draw glowing sparkle with outer glow
                     context.opacity = opacity
                     context.fill(
-                        Circle().path(in: rect.insetBy(dx: -2, dy: -2)),
-                        with: .color(particle.color.opacity(0.3))
+                        Circle().path(in: rect.insetBy(dx: -8, dy: -8)),
+                        with: .color(particle.color.opacity(0.1))
+                    )
+                    context.fill(
+                        Circle().path(in: rect.insetBy(dx: -4, dy: -4)),
+                        with: .color(particle.color.opacity(0.25))
                     )
                     context.fill(
                         Circle().path(in: rect),
@@ -160,11 +183,11 @@ private struct ParticleBurstView: View {
 
     private func generateEmissionPoints(in size: CGSize) -> [CGPoint] {
         // Generate random points along the approximate edge of a letter
-        // The letter is roughly centered and takes up most of the overlay area
+        // The letter is roughly centered in a 500x500 canvas
         let centerX = size.width / 2
         let centerY = size.height / 2
-        let letterWidth: CGFloat = 50   // Approximate letter width
-        let letterHeight: CGFloat = 70  // Approximate letter height
+        let letterWidth: CGFloat = 80   // Approximate letter width
+        let letterHeight: CGFloat = 110  // Approximate letter height
 
         var points: [CGPoint] = []
         for _ in 0..<numberOfEmissionPoints {
@@ -175,21 +198,21 @@ private struct ParticleBurstView: View {
             case 0: // Top edge
                 point = CGPoint(
                     x: centerX + CGFloat.random(in: -letterWidth/2...letterWidth/2),
-                    y: centerY - letterHeight/2 + CGFloat.random(in: -5...5)
+                    y: centerY - letterHeight/2 + CGFloat.random(in: -8...8)
                 )
             case 1: // Bottom edge
                 point = CGPoint(
                     x: centerX + CGFloat.random(in: -letterWidth/2...letterWidth/2),
-                    y: centerY + letterHeight/2 + CGFloat.random(in: -5...5)
+                    y: centerY + letterHeight/2 + CGFloat.random(in: -8...8)
                 )
             case 2: // Left edge
                 point = CGPoint(
-                    x: centerX - letterWidth/2 + CGFloat.random(in: -5...5),
+                    x: centerX - letterWidth/2 + CGFloat.random(in: -8...8),
                     y: centerY + CGFloat.random(in: -letterHeight/2...letterHeight/2)
                 )
             default: // Right edge
                 point = CGPoint(
-                    x: centerX + letterWidth/2 + CGFloat.random(in: -5...5),
+                    x: centerX + letterWidth/2 + CGFloat.random(in: -8...8),
                     y: centerY + CGFloat.random(in: -letterHeight/2...letterHeight/2)
                 )
             }
@@ -199,12 +222,12 @@ private struct ParticleBurstView: View {
     }
 
     private func startEmitting() {
-        // Initialize emission points (approximate letter bounds)
-        emissionPoints = generateEmissionPoints(in: CGSize(width: 100, height: 100))
+        // Initialize emission points centered in 500x500 canvas
+        emissionPoints = generateEmissionPoints(in: CGSize(width: 600, height: 600))
 
         // Emit initial burst from each point
         for point in emissionPoints {
-            for _ in 0..<4 {
+            for _ in 0..<10 {
                 particles.append(SparkleParticle(origin: point))
             }
         }
@@ -216,13 +239,15 @@ private struct ParticleBurstView: View {
             particles.removeAll { now - $0.birthTime > $0.lifetime }
 
             // Occasionally shuffle emission points for variety
-            if Int.random(in: 0..<30) == 0 {
-                emissionPoints = generateEmissionPoints(in: CGSize(width: 100, height: 100))
+            if Int.random(in: 0..<15) == 0 {
+                emissionPoints = generateEmissionPoints(in: CGSize(width: 600, height: 600))
             }
 
-            // Add new particle from a random emission point
-            if particles.count < maxParticles, let point = emissionPoints.randomElement() {
-                particles.append(SparkleParticle(origin: point))
+            // Add multiple new particles from random emission points
+            for _ in 0..<4 {
+                if particles.count < maxParticles, let point = emissionPoints.randomElement() {
+                    particles.append(SparkleParticle(origin: point))
+                }
             }
         }
     }
@@ -242,17 +267,19 @@ private struct SparkleParticle: Identifiable {
         self.birthTime = Date().timeIntervalSinceReferenceDate
         self.origin = origin
         self.angle = Double.random(in: 0...(2 * .pi))
-        self.speed = Double.random(in: 40...100)  // pixels per second
-        self.size = Double.random(in: 2...5)  // tiny sparkles
-        self.lifetime = Double.random(in: 0.4...0.8)  // short-lived
+        self.speed = Double.random(in: 120...320)  // pixels per second - faster for more spread
+        self.size = Double.random(in: 3...8)  // sparkles
+        self.lifetime = Double.random(in: 1.0...2.0)  // longer-lived for particles to travel further
 
-        // Random green or yellow color
+        // Random green or yellow color with some white sparkles
         let colors: [Color] = [
             .green,
             .green.opacity(0.9),
             .yellow,
             Color(red: 0.7, green: 1.0, blue: 0.3),  // lime
             Color(red: 1.0, green: 0.9, blue: 0.2),  // gold
+            .white,
+            Color(red: 0.8, green: 1.0, blue: 0.8),  // pale green
         ]
         self.color = colors.randomElement()!
     }
@@ -284,15 +311,12 @@ private struct SparkleParticle: Identifiable {
 #Preview("Particle Burst") {
     ZStack {
         Color.black.ignoresSafeArea()
-        HStack(spacing: 30) {
-            ForEach(["A", "G", "C", "E"], id: \.self) { letter in
-                Text(letter)
-                    .font(.system(size: 80, weight: .bold, design: .rounded))
-                    .foregroundColor(.green)
-                    .overlay {
-                        ParticleBurstView()
-                    }
-            }
+        ZStack {
+            ParticleBurstView()
+                .frame(width: 600, height: 600)
+            Text("A")
+                .font(.system(size: 120, weight: .bold, design: .rounded))
+                .foregroundColor(.green)
         }
     }
 }
