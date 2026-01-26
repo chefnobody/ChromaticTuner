@@ -18,7 +18,6 @@ struct SpectrumVisualizationView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12))
         .onChange(of: audioData.spectrum) {
             updateBarHeights()
         }
